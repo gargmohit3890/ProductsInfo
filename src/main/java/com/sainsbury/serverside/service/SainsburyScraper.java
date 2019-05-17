@@ -27,15 +27,15 @@ import com.sainsbury.serverside.vo.Total;
  */
 @SuppressWarnings("deprecation")
 public class SainsburyScraper {
-	
+
 	private static String baseUrl;
 
 	@SuppressWarnings("unchecked")
 	public static String run(String url) {
-		if(url == null || "".equals(url)){
+		if (url == null || "".equals(url)) {
 			return "Empty url";
 		}
-		if(!vaildateUrl(url)){
+		if (!vaildateUrl(url)) {
 			return "Invalid url";
 		}
 		baseUrl = url;
@@ -53,19 +53,18 @@ public class SainsburyScraper {
 					Product productWithInformation = new Product();
 					HtmlAnchor itemAnchor = ((HtmlAnchor) product.getFirstByXPath(".//a"));
 					String productLinkUri = itemAnchor.getHrefAttribute();
-					BigDecimal productPrice = getProductPrice(product); 
+					BigDecimal productPrice = getProductPrice(product);
 					String productDetailUrl = getProductDetailsUrl(productLinkUri);
 					HtmlPage productDetailPage = client.getPage(productDetailUrl);
-					productWithInformation.setDescription(getDescriptionOfProduct( productDetailPage));
+					productWithInformation.setDescription(getDescriptionOfProduct(productDetailPage));
 					productWithInformation.setCal_per_100g(getCaloriesInfo(productDetailPage));
 					productWithInformation.setTitle(itemAnchor.asText());
 					productWithInformation.setUnit_price(productPrice);
 					productListInAPage.add(productWithInformation);
 				}
-				
 
 				Total total = getTotalPriceOfAllProducts(productListInAPage);
-				
+
 				ObjectMapper mapper = new ObjectMapper();
 				Output output = new Output();
 				output.setResults(productListInAPage);
@@ -87,7 +86,8 @@ public class SainsburyScraper {
 	 * @return
 	 */
 	private static Total getTotalPriceOfAllProducts(List<Product> productListInAPage) {
-		BigDecimal sum = productListInAPage.stream().map(Product::getUnit_price).reduce(BigDecimal.ZERO, BigDecimal::add);
+		BigDecimal sum = productListInAPage.stream().map(Product::getUnit_price).reduce(BigDecimal.ZERO,
+				BigDecimal::add);
 		BigDecimal actualPrice = sum.divide(new BigDecimal(1.2), 2, RoundingMode.HALF_UP);
 		BigDecimal vat = sum.subtract(actualPrice);
 		Total total = new Total();
@@ -97,87 +97,94 @@ public class SainsburyScraper {
 	}
 
 	/**
-	 * This method is used to extract the information of the calories per 100g of the product
+	 * This method is used to extract the information of the calories per 100g
+	 * of the product
+	 * 
 	 * @param productWithInformation
 	 * @param productDetailPage
 	 */
-	private static Integer getCaloriesInfo( HtmlPage productDetailPage) {
+	private static Integer getCaloriesInfo(HtmlPage productDetailPage) {
 		HtmlTable table = null;
-		try{
+		try {
 			table = (HtmlTable) productDetailPage.getHtmlElementById("information")
 					.getFirstByXPath("//table[@class='nutritionTable']");
-		}catch (ElementNotFoundException ex) {
+
+			String cal = null;
+			if (table != null && table.asXml() != null) {
+				HtmlTableBody body = table.getBodies().get(0);
+				List<HtmlTableRow> rows = body.getRows();
+				HtmlTableRow row0 = rows.get(0);
+				boolean rowspan = row0.getCell(0).hasAttribute("rowspan");
+				HtmlTableRow row1 = rows.get(1);
+				if (rowspan) {
+
+					// row1.getCol
+					cal = row1.getCell(0).asText();
+					if (cal != null && !"".equals(cal)) {
+						cal = cal.replaceAll("\\D+", "");
+						if (!cal.equals("")) {
+							return Integer.parseInt(cal);
+						}
+
+					}
+				} else {
+					cal = row1.getCell(1).asText();
+					return Integer.parseInt(cal);
+				}
+
+			}
+		} catch (ElementNotFoundException ex) {
 			System.out.println("Exception while fetching Calories");
 			return null;
 		}
-		String cal = null;
-		if (table != null && table.asXml() != null) {
-			HtmlTableBody body = table.getBodies().get(0);
-			List<HtmlTableRow> rows = body.getRows();
-			HtmlTableRow row0 = rows.get(0);
-			boolean rowspan = row0.getCell(0).hasAttribute("rowspan");
-			HtmlTableRow row1 = rows.get(1);
-			if (rowspan) {
 
-				// row1.getCol
-				cal = row1.getCell(0).asText();
-				if (cal != null && !"".equals(cal)) {
-					cal = cal.replaceAll("\\D+", "");
-					if (!cal.equals("")) {
-						return Integer.parseInt(cal);
-					}
-
-				}
-			} else {
-				cal = row1.getCell(1).asText();
-				return Integer.parseInt(cal);
-			}
-
-		}
 		return null;
 	}
 
 	/**
-	 * This method is used to extract the description of the product. 
+	 * This method is used to extract the description of the product.
+	 * 
 	 * @param productWithInformation
 	 * @param productDetailPage
 	 */
 	@SuppressWarnings("unchecked")
 	private static String getDescriptionOfProduct(HtmlPage productDetailPage) {
 		HtmlElement description = null;
-		try{
-			description = (HtmlElement) productDetailPage.getHtmlElementById("information")
-					.getFirstByXPath(".//p");;
-		}catch(ElementNotFoundException ex){
+		try {
+			description = (HtmlElement) productDetailPage.getHtmlElementById("information").getFirstByXPath(".//p");
+			;
+			List<HtmlElement> listOfDescription = null;
+			String descriptionText;
+			if (description.asText() == null || "".equals(description.asText().trim())) {
+				listOfDescription = (List<HtmlElement>) productDetailPage.getHtmlElementById("information")
+						.getByXPath(".//p");
+
+				for (HtmlElement desc : listOfDescription) {
+					descriptionText = desc.asText();
+					if (!"".equals(descriptionText)) {
+						return descriptionText;
+					}
+				}
+
+			} else {
+				return description.asText();
+			}
+		} catch (ElementNotFoundException ex) {
 			System.out.println("Exception while fetching description");
 			return null;
 		}
-		
-		List<HtmlElement> listOfDescription = null;
-		String descriptionText;
-		if (description.asText() == null || "".equals(description.asText().trim())) {
-			listOfDescription = (List<HtmlElement>) productDetailPage.getHtmlElementById("information")
-					.getByXPath(".//p");
 
-			for (HtmlElement desc : listOfDescription) {
-				descriptionText = desc.asText();
-				if (!"".equals(descriptionText)) {
-					return descriptionText;
-				}
-			}
-
-		} else {
-			return description.asText();
-		}
 		return "";
 	}
-	
+
 	/**
-	 * This method is used to get the price in the desired format for the display. This method also takes care of rounding off.
+	 * This method is used to get the price in the desired format for the
+	 * display. This method also takes care of rounding off.
+	 * 
 	 * @param product
 	 * @return
 	 */
-	private static BigDecimal getProductPrice(HtmlElement product){
+	private static BigDecimal getProductPrice(HtmlElement product) {
 		HtmlElement price = ((HtmlElement) product.getFirstByXPath(".//p[@class='pricePerUnit']"));
 		// removing the pound sign
 		String priceWithSign = price.asText().substring(1);
@@ -185,9 +192,11 @@ public class SainsburyScraper {
 		int poistionForSubString = priceWithSign.indexOf("/");
 		return new BigDecimal(priceWithSign.substring(0, poistionForSubString)).setScale(2, RoundingMode.HALF_UP);
 	}
-	
+
 	/**
-	 * This method is used to create the url for getting the product detailed information.
+	 * This method is used to create the url for getting the product detailed
+	 * information.
+	 * 
 	 * @param productDetailUri
 	 * @return
 	 */
@@ -205,10 +214,10 @@ public class SainsburyScraper {
 		StringBuilder sb1 = new StringBuilder(intialUrl);
 		return sb1.reverse() + suffixForProductDetails;
 	}
-	
+
 	@SuppressWarnings("deprecation")
-	private static boolean vaildateUrl(String url){
+	private static boolean vaildateUrl(String url) {
 		UrlValidator urlValidator = new UrlValidator();
-		return urlValidator.isValid(url); 
+		return urlValidator.isValid(url);
 	}
 }
